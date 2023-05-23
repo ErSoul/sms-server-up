@@ -1,5 +1,9 @@
 #!/bin/sh
 
+# @author: David Colmenares
+# @copyright: Copyright (C) 2023 David Colmenares
+# @license: 4-Clause BSD
+
 set -eu
 
 encode_credentials() {
