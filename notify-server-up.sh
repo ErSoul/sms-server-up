@@ -17,6 +17,7 @@ Argument:
 Options:
 
  -h --help --usage	Show this help message.
+ --email		Send email notification.
  --twilio		Use the Twilio service API.
  --telesign		Use the Telesign service API.
 EOF
@@ -35,7 +36,8 @@ main() {
 	type iconv > /dev/null 2>&1 || (echo "ERROR: iconv must be in your PATH" >&2 && exit 1)
 	test ! -e $PWD/.env && echo "ERROR: you need to create a .env file" >&2 && exit 1
 	
-	ARGS="$@"
+	ARGS="$*"
+	EMAIL=false
 	
 	while [ $# -gt 0 ]; do
 		case $1 in
@@ -47,6 +49,10 @@ main() {
 				SERVICE="twilio"
 				shift
 				;;
+			--email)
+				EMAIL=true
+				shift
+				;;
 			-h|--help|--usage)
 				help_usage
 				;;
@@ -55,17 +61,20 @@ main() {
 				exit 1
 				;;
 			*)
-				POS_ARGS+=("$1") # Will be added to msg body
+				POS_ARGS="$POS_ARGS $1" # Will be added to msg body
 				shift
 				;;
 		esac
 	done
 	
 	# Two substring present in string. src: https://unix.stackexchange.com/a/55391/236112
-	echo ${ARGS[@]} | awk 'err=0; /--twilio/ && /--telesign/ && err=1; {exit err}' > /dev/null 2>&1 || (echo "error: must specify twilio or telesign." >&2 && exit 1)
-	echo ${ARGS[@]} | grep -i -e "--telesign" -e "--twilio" > /dev/null 2>&1 || (echo "error: must specify twilio or telesign." >&2 && exit 1)
+	echo $ARGS | awk 'err=0; /--twilio/ && /--telesign/ && err=1; {exit err}' > /dev/null 2>&1 || (echo "error: must specify twilio or telesign." >&2 && exit 1)
+	echo $ARGS | grep -i -e "--telesign" -e "--twilio" > /dev/null 2>&1 || (echo "error: must specify twilio or telesign." >&2 && exit 1)
+  if $EMAIL; then
+  	type sendemail > /dev/null 2>&1 || (echo "ERROR: sendemail must be installed. (https://github.com/mogaal/sendemail)" >&2 && exit 1)
+  fi
 	
-	set -- ${POS_ARGS[@]}
+	set -- $POS_ARGS
 
 	. $PWD/.env # source file
 
@@ -74,6 +83,14 @@ main() {
 	[ -z $CUSTOMER_ID ] && echo "ERROR: CUSTOMER_ID must be setted." >&2 && exit 1
 	[ -z $PHONE_TARGET ] && echo "ERROR: PHONE_TARGET must be setted." >&2 && exit 1
 	[ -z $SERVICE ] || [ $SERVICE = 'twilio' ] && [ -z $PHONE_SRC ] && echo "ERROR: PHONE_SRC must be setted." >&2 && exit 1
+	
+	if $EMAIL; then
+		[ -z $SMTP_HOST ] && echo "ERROR: SMTP_HOST must be setted." >&2 && exit 1
+		[ -z $SMTP_PORT ] && echo "ERROR: SMTP_PORT must be setted." >&2 && exit 1
+		[ -z $FROM_ADDRESS ] && echo "ERROR: FROM_ADDRESS must be setted." >&2 && exit 1
+		[ -z $FROM_PASSWORD ] && echo "ERROR: FROM_PASSWORD must be setted." >&2 && exit 1
+		[ -z $TO_ADDRESS ] && echo "ERROR: TO_ADDRESS must be setted." >&2 && exit 1
+	fi
 
 	cd $OLDPWD # Go back to previous directory
 
@@ -84,6 +101,8 @@ main() {
 		sleep 5s
 		echo 'Waiting for server to be online...'
 	done
+	
+	$EMAIL && sendemail -f $FROM_ADDRESS -t $TO_ADDRESS -u "Server powered on." -m "$*" -s $SMTP_HOST:$SMTP_PORT -xu $FROM_ADDRESS -xp $FROM_PASSWORD -o tls=yes
 
 	case $SERVICE in
 		telesign)
