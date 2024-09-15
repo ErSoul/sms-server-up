@@ -37,6 +37,11 @@ main() {
 				shift
 				shift
 				;;
+			--ws-api-key)
+				EVOLUTION_API_KEY=$2
+				shift
+				shift
+				;;
 			-h|--help|--usage)
 				help_usage
 				;;
@@ -69,8 +74,10 @@ main() {
 	if [ $RESULT = "PLUGGED_AC" ] && [ $PREV_STATUS != "PLUGGED_AC" ]
 	then
 		[ -n $NTFY_TOPIC ] && ntfy_notify -s "INFO: Power On" -t "info,power,zap" -m "You can arrive home safely"
+		[ -n $EVOLUTION_API_KEY ] && ws_evolution_notify -m "¡Llegó la Luz!"
 	elif [ $RESULT != "PLUGGED_AC" ] && [ $PREV_STATUS = "PLUGGED_AC" ]; then
 		[ -n $NTFY_TOPIC ] && ntfy_notify -s "ALERT: Power Outage!" -p 'urgent' -t 'warning,power' -m "You're advised!"
+		[ -n $EVOLUTION_API_KEY ] && ws_evolution_notify -m "Se fué la Luz. :-("
 	fi
 }
 
@@ -91,10 +98,39 @@ ntfy_notify() {
 		-H "Priority: ${PRIORITY:-default}" \
 		-H "Tags: ${TAGS}" \
 		-d "${MESSAGE}" \
-		ntfy.sh/$NTFY_TOPIC 2>&1 > /dev/null
+		https://ntfy.sh/$NTFY_TOPIC 2>&1 > /dev/null
 	do
-		log_error "ERROR: waiting for connection" 
+		log_error "ERROR: waiting for connection for https://ntfy.sh"
 		sleep 5
+	done
+}
+
+ws_evolution_notify() {
+	while getopts d:s:p:t:m: OPT # s - Instance ## a - ApiKey ## m - MESSAGE content
+	do
+		case $OPT in
+		a) EVOLUTION_API_KEY="$OPTARG";;
+		d) EVOLUTION_API_FQDN="$OPTARG";;
+		s) EVOLUTION_API_INSTANCE="$OPTARG";;
+		t) WS_PHONES="$OPTARG";;
+		m) MESSAGE="$OPTARG";;
+		?) echo "ERROR: input error." && return 1
+		esac
+	done
+	
+	local IFS=", \n"
+	
+	for PHONE in $WS_PHONES
+	do
+			until curl -s \
+				-H "Content-Type: application/json" \
+				-H "Apikey: ${EVOLUTION_API_KEY}" \
+				-d "{\"number\": \"${PHONE}\", \"options\": { \"delay\": 1200, \"presence\": \"composing\"}, \"textMessage\": { \"text\": \"${MESSAGE}\" }}" \
+				https://$EVOLUTION_API_FQDN/message/sendText/$EVOLUTION_API_INSTANCE 2>&1 > /dev/null
+			do
+				log_error "ERROR: waiting for connection for https://$EVOLUTION_API_FQDN"
+				sleep 5
+			done
 	done
 }
 
@@ -108,6 +144,7 @@ Options:
 -h --help --usage		Show this help message.
 -s FILE 			File to read previous state
 --ntfy-topic NTFY_TOPIC		Set topic from https://ntfy.sh
+--ws-api-key API_KEY		Set topic from https://doc.evolution-api.com/v2/en/env#authentication
 EOF
 exit 0
 }
