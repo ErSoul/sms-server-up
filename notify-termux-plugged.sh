@@ -124,9 +124,9 @@ ws_evolution_notify() {
 	do
 			until curl -s \
 				-H "Content-Type: application/json" \
-				-H "Apikey: ${EVOLUTION_API_KEY}" \
-				-d "{\"number\": \"${PHONE}\", \"options\": { \"delay\": 1200, \"presence\": \"composing\"}, \"textMessage\": { \"text\": \"${MESSAGE}\" }}" \
-				https://$EVOLUTION_API_FQDN/message/sendText/$EVOLUTION_API_INSTANCE 2>&1 > /dev/null
+				-H "apikey: ${EVOLUTION_API_KEY}" \
+				-d "{\"number\": \"${PHONE}\", \"text\": \"${MESSAGE}\"}" \
+				"https://$EVOLUTION_API_FQDN/message/sendText/$EVOLUTION_API_INSTANCE" 2>&1 > /dev/null
 			do
 				log_error "ERROR: waiting for connection for https://$EVOLUTION_API_FQDN"
 				sleep 5
